@@ -1,0 +1,40 @@
+# worker_docker-compose.yml (수정본)
+
+version: '3.8'
+
+services:
+  # 🌟 워커 노드 서비스 1 (Worker-1)
+  worker-1:
+    build: .
+    container_name: news-worker-1
+    ports:
+      - "8001:8001" # 🌟 8001 포트 개방
+    environment:
+      - MONGO_HOST=3.107.13.169
+      # ... (나머지 환경 변수 유지)
+      - WORKER_NAME=Worker-1 # 🌟 고유 이름 설정
+    command: python worker_server.py
+
+  # 🌟 워커 노드 서비스 2 (Worker-2) - 추가
+  worker-2:
+    build: .
+    container_name: news-worker-2
+    ports:
+      - "8002:8002" # 🌟 8002 포트 개방
+    environment:
+      - MONGO_HOST=3.107.13.169
+      # ... (나머지 환경 변수 유지)
+      - WORKER_NAME=Worker-2 # 🌟 고유 이름 설정
+    command: python worker_server.py
+
+  # 🌟 워커 노드 서비스 3 (Worker-3) - 추가
+  worker-3:
+    build: .
+    container_name: news-worker-3
+    ports:
+      - "8003:8003" # 🌟 8003 포트 개방
+    environment:
+      - MONGO_HOST=3.107.13.169
+      # ... (나머지 환경 변수 유지)
+      - WORKER_NAME=Worker-3 # 🌟 고유 이름 설정
+    command: python worker_server.py
