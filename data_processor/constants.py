@@ -37,15 +37,6 @@ WORKER_CHUNK_FILES = {
 WORKER_NAME = os.environ.get('WORKER_NAME', 'Master')
 WORKER_FILE_PATH = WORKER_CHUNK_FILES.get(WORKER_NAME, None)
 
-# C. 마스터가 사용할 워커 주소 목록 (워커에는 불필요하지만 파일 일관성을 위해 유지)
-_DEFAULT_WORKER_ADDRESSES = (
-    "http://49.168.187.55:8001," 
-    "http://49.168.187.55:8002,"  
-    "http://49.168.187.55:8003"
-)
-_WORKER_ADDRESSES_STR = os.environ.get('WORKER_ADDRESSES', _DEFAULT_WORKER_ADDRESSES)
-WORKER_ADDRESSES = [addr.strip() for addr in _WORKER_ADDRESSES_STR.split(',') if addr.strip()]
-
 
 # ----------------------------------------------------------------------
 # 3. DB 문서 필드 스키마 및 CSV 설정
