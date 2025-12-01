@@ -6,7 +6,7 @@ import os
 # 1. MongoDB 연결 설정
 # ----------------------------------------------------------------------
 # 🌟 워커는 이 환경 변수를 통해 마스터/DB의 공인 IP를 받습니다.
-MONGO_HOST = os.environ.get('MONGO_HOST', '49.168.187.55')
+MONGO_HOST = os.environ.get('MONGO_HOST', '3.107.13.169')
 MONGO_PORT = os.environ.get('MONGO_PORT', '27017')
 DB_NAME = os.environ.get('MONGO_DB', 'BBC_analysis_db')
 MONGO_USER = os.environ.get('MONGO_USER', 'mongouser')
@@ -20,7 +20,7 @@ MONGO_URI = (
 # ----------------------------------------------------------------------
 # 2. 분산 워커 및 파일 설정
 # ----------------------------------------------------------------------
-RECORD_NOUNS_COLLECTION = "file_noun_records"
+RECORD_NOUNS_COLLECTION = "ImFiles"
 FILE_FOLDER_PATH = "data"
 TOP_N = 50
 
@@ -31,11 +31,11 @@ WORKER_CHUNK_FILES = {
         "data/2015.csv",
         "data/2016.csv"
     ],
-    "worker-2": [
+    "Worker-2": [
         "data/2017.csv",
         "data/2018.csv"
     ],
-    "worker-3": [
+    "Worker-3": [
         "data/2019.csv",
         "data/2020.csv"
     ]
