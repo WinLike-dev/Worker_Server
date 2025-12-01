@@ -30,6 +30,15 @@ WORKER_CHUNK_FILES = {
         "data/2015.csv",
         "data/2018.csv",
         "data/2022.csv"
+    ],
+    "worker-2": [
+        "data/2019.csv",
+        "data/2017.csv",
+        "data/2014.csv"
+    ],
+    "worker-3": [
+        "data/2016.csv",
+        "data/2021.csv"
     ]
 }
 
