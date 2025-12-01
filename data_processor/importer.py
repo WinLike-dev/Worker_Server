@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 from textblob import TextBlob
 from .db_connector import get_mongodb_client
-from constants import (
+from .constants import (
     WORKER_NAME, WORKER_FILE_PATH,
     DB_NAME, RECORD_NOUNS_COLLECTION, EXCLUDE_NOUNS,
     DB_FIELD_MAPPING, DB_FIELD_DEFAULTS,
