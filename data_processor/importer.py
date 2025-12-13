@@ -53,7 +53,6 @@ def parse_tags(tags_str: str) -> List[str]:
     return [tag.strip().lower() for tag in tags_str.split(',') if tag.strip()]
 
 
-# 🌟 함수 이름 변경 및 로직 수정 🌟
 def process_worker_files() -> bool:
     """
     워커에게 할당된 CSV 파일 목록을 읽어 각 레코드의 명사를 추출하고 MongoDB에 저장합니다.
@@ -65,20 +64,20 @@ def process_worker_files() -> bool:
 
     print(f"[{WORKER_NAME}] 워커 작업 시작. 할당 파일 목록: {WORKER_FILE_PATH}")
 
-    client = get_mongodb_client()
+    client = get_mongodb_client()  # db_connector.py에서 독립적인 연결 생성
     if client is None:
-        return False
+        return False  # DB 연결 실패 시 바로 종료
 
-    all_dataframes = []
+    success = False  # 작업 성공 여부 플래그
 
     try:
-        # 1. 할당된 파일 경로 목록을 순회하며 DataFrame 리스트에 추가합니다.
+        # --- 1. 데이터 로드 및 전처리 ---
+        all_dataframes = []
         for file_path in WORKER_FILE_PATH:
             print(f"🔄 파일 로드 중: {file_path}")
             df_chunk = pd.read_csv(file_path, encoding='utf-8')
             all_dataframes.append(df_chunk)
 
-        # 2. 모든 DataFrame을 하나로 병합합니다.
         df = pd.concat(all_dataframes, ignore_index=True)
         print(f"✅ 총 {len(all_dataframes)}개 파일 로드 완료. 전체 레코드: {len(df)}")
 
@@ -104,22 +103,18 @@ def process_worker_files() -> bool:
         # MongoDB에 저장할 때 사용할 고유 식별자(index)를 추가
         df[DB_FIELD_RECORD_ID] = df.index
 
-    except Exception as e:
-        print(f"ERROR: 데이터 로드/전처리 중 오류 발생: {e}", file=sys.stderr)
-        client.close()
-        return False
+        # --- 2. 명사 추출 및 DB 삽입 ---
+        db = client[DB_NAME]
+        record_collection = db[RECORD_NOUNS_COLLECTION]
 
-    db = client[DB_NAME]
-    record_collection = db[RECORD_NOUNS_COLLECTION]
-    # **주의:** 워커가 데이터를 추가/재생성할 때 기존 데이터를 지우는 로직이 필요한지 확인 후 사용
-    # record_collection.delete_many({})
+        # **주의:** 워커가 데이터를 추가/재생성할 때 기존 데이터를 지우는 로직이 필요한지 확인 후 사용
+        # record_collection.delete_many({})
 
-    documents_to_insert = []
-    total_records = len(df)
+        documents_to_insert = []
+        total_records = len(df)
 
-    print("--- 레코드별 명사 추출 및 MongoDB 직접 저장 시작 (file_noun_records) ---")
+        print("--- 레코드별 명사 추출 및 MongoDB 직접 저장 시작 (file_noun_records) ---")
 
-    try:
         for index, row in df.iterrows():
             combined_text = str(row[DB_FIELD_HEADING]) + ' ' + str(row[DB_FIELD_ARTICLES])
             nouns = extract_and_filter_proper_nouns(combined_text)
@@ -144,10 +139,16 @@ def process_worker_files() -> bool:
         else:
             print("⚠️ 경고: 저장할 레코드가 없습니다.")
 
-    except Exception as e:
-        print(f"ERROR: MongoDB 저장 중 오류 발생: {e}", file=sys.stderr)
-        client.close()
-        return False
+        success = True  # 모든 작업이 오류 없이 완료됨
 
-    client.close()
-    return True
+    except Exception as e:
+        print(f"ERROR: 워커 데이터 처리 및 저장 중 오류 발생: {e}", file=sys.stderr)
+        success = False
+
+    finally:
+        # 🌟 중요: 작업 성공/실패와 관계없이 독립 연결을 닫아줍니다. 🌟
+        if client:
+            client.close()
+            print(f"[{WORKER_NAME}] Importer 작업 완료 후 독립 연결 해제.")
+
+    return success

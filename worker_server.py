@@ -51,11 +51,6 @@ def run_processing_and_notify():
     print(f"[{WORKER_NAME}] Phase 2 작업 완료 및 마스터에게 최종 알림 전송 완료.")
 
 
-# 🌟 서버 시작 시 초기 데이터 처리 (필수)
-print(f"[{WORKER_NAME}] Flask 서버 구동 전, 데이터 처리 작업을 실행합니다.")
-process_worker_files()
-
-
 @app.route('/status', methods=['GET'])
 def get_status():
     return jsonify({
