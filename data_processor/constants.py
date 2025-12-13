@@ -6,7 +6,7 @@ import os
 # 1. MongoDB 연결 설정
 # ----------------------------------------------------------------------
 # 🌟 워커는 이 환경 변수를 통해 마스터/DB의 공인 IP를 받습니다.
-MONGO_HOST = os.environ.get('MONGO_HOST', '3.107.13.169')
+MONGO_HOST = os.environ.get('MONGO_HOST', '172.31.23.207')
 MONGO_PORT = os.environ.get('MONGO_PORT', '27017')
 DB_NAME = os.environ.get('MONGO_DB', 'BBC_analysis_db')
 MONGO_USER = os.environ.get('MONGO_USER', 'mongouser')
