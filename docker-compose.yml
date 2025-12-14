@@ -17,6 +17,8 @@ services:
       - MONGO_PASS=1234
       - WORKER_NAME=Worker-1 # 🌟 고유 이름 설정
       - WORKER_PORT=8001
+    volumes:
+      - ./data:/usr/src/app/data
     command: python manage.py runserver 0.0.0.0:8001
 
   # 🌟 워커 노드 서비스 2 (Worker-2) - 추가
@@ -33,6 +35,8 @@ services:
       - MONGO_PASS=1234
       - WORKER_NAME=Worker-2 # 🌟 고유 이름 설정
       - WORKER_PORT=8002
+    volumes:
+      - ./data:/usr/src/app/data
     command: python manage.py runserver 0.0.0.0:8002
 
   # 🌟 워커 노드 서비스 3 (Worker-3) - 추가
@@ -49,4 +53,6 @@ services:
       - MONGO_PASS=1234
       - WORKER_NAME=Worker-3 # 🌟 고유 이름 설정
       - WORKER_PORT=8003
+    volumes:
+      - ./data:/usr/src/app/data
     command: python manage.py runserver 0.0.0.0:8003
