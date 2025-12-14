@@ -7,15 +7,24 @@ from .db_connector import get_mongodb_client
 from .constants import (
     WORKER_NAME, WORKER_FILE_PATH,
     DB_NAME, RECORD_NOUNS_COLLECTION, EXCLUDE_NOUNS,
-    DB_FIELD_MAPPING, DB_FIELD_DEFAULTS,
+    # DB_FIELD_MAPPING 제거
+    DB_FIELD_DEFAULTS,
+    # 🌟 DB 필드명 임포트
     DB_FIELD_HEADING, DB_FIELD_DATE, DB_FIELD_TAGS, DB_FIELD_ARTICLES,
-    DB_FIELD_NOUNS, DB_FIELD_RECORD_ID
+    DB_FIELD_NOUNS, DB_FIELD_RECORD_ID,
+    # 🌟 CSV 필드명 임포트 (추가)
+    CSV_FIELD_HEADING, CSV_FIELD_DATE, CSV_FIELD_TAGS, CSV_FIELD_ARTICLES,
+    CSV_FIELD_RECORD_ID
 )
 import warnings
 import sys
 
 warnings.filterwarnings('ignore')
 
+
+# ----------------------------------------------------------------------
+# 유틸리티 함수 (기존 코드 유지)
+# ----------------------------------------------------------------------
 
 def extract_and_filter_proper_nouns(text) -> List[str]:
     """TextBlob을 사용하여 고유 명사를 추출하고, 제외 목록에 있는 단어를 필터링합니다."""
@@ -53,6 +62,10 @@ def parse_tags(tags_str: str) -> List[str]:
     return [tag.strip().lower() for tag in tags_str.split(',') if tag.strip()]
 
 
+# ----------------------------------------------------------------------
+# MongoDB 연결 및 데이터 처리 함수
+# ----------------------------------------------------------------------
+
 def process_worker_files() -> bool:
     """
     워커에게 할당된 CSV 파일 목록을 읽어 각 레코드의 명사를 추출하고 MongoDB에 저장합니다.
@@ -60,15 +73,15 @@ def process_worker_files() -> bool:
     """
     if WORKER_NAME == 'Master' or not WORKER_FILE_PATH:
         print(f"[{WORKER_NAME}] 워커 작업 실행: 파일을 처리하지 않고 건너뜁니다.")
-        return True  # 처리할 파일이 없으면 성공으로 간주
+        return True
 
     print(f"[{WORKER_NAME}] 워커 작업 시작. 할당 파일 목록: {WORKER_FILE_PATH}")
 
-    client = get_mongodb_client()  # db_connector.py에서 독립적인 연결 생성
+    client = get_mongodb_client()
     if client is None:
-        return False  # DB 연결 실패 시 바로 종료
+        return False
 
-    success = False  # 작업 성공 여부 플래그
+    success = False
 
     try:
         # --- 1. 데이터 로드 및 전처리 ---
@@ -81,34 +94,24 @@ def process_worker_files() -> bool:
         df = pd.concat(all_dataframes, ignore_index=True)
         print(f"✅ 총 {len(all_dataframes)}개 파일 로드 완료. 전체 레코드: {len(df)}")
 
-        # CSV 컬럼과 DB 필드 이름 매핑
-        df = df.rename(columns={
-            csv_col: db_col
-            for csv_col, db_col in DB_FIELD_MAPPING.items()
-            if csv_col in df.columns
-        })
+        # 🌟 df.rename(columns=DB_FIELD_MAPPING) 로직 제거 🌟
+        # CSV_FIELD_... 변수를 사용하여 원본 컬럼에 접근합니다.
 
         # 필수 컬럼 검사
-        required_db_cols = list(DB_FIELD_MAPPING.values())
-        if not all(col in df.columns for col in required_db_cols):
-            missing = [col for col in required_db_cols if col not in df.columns]
-            raise ValueError(f"필수 컬럼 누락: {missing}. CSV 컬럼과 DB_FIELD_MAPPING을 확인하세요.")
+        required_csv_cols = [CSV_FIELD_HEADING, CSV_FIELD_ARTICLES, CSV_FIELD_DATE, CSV_FIELD_TAGS]
+        if not all(col in df.columns for col in required_csv_cols):
+            missing = [col for col in required_csv_cols if col not in df.columns]
+            raise ValueError(f"필수 컬럼 누락: {missing}. CSV 파일 헤더를 확인하세요.")
 
-        # 데이터 정리 및 타입 변환
-        df[DB_FIELD_DATE] = pd.to_datetime(df[DB_FIELD_DATE], errors='coerce').dt.strftime('%Y-%m-%d')
-        df[DB_FIELD_ARTICLES] = df[DB_FIELD_ARTICLES].fillna('')
-        df[DB_FIELD_HEADING] = df[DB_FIELD_HEADING].fillna('')
-        df[DB_FIELD_TAGS] = df[DB_FIELD_TAGS].fillna('')
-
-        # MongoDB에 저장할 때 사용할 고유 식별자(index)를 추가
-        df[DB_FIELD_RECORD_ID] = df.index
+        # 데이터 정리 및 타입 변환 (CSV_FIELD_... 사용)
+        df[CSV_FIELD_DATE] = pd.to_datetime(df[CSV_FIELD_DATE], errors='coerce').dt.strftime('%Y-%m-%d')
+        df[CSV_FIELD_ARTICLES] = df[CSV_FIELD_ARTICLES].fillna('')
+        df[CSV_FIELD_HEADING] = df[CSV_FIELD_HEADING].fillna('')
+        df[CSV_FIELD_TAGS] = df[CSV_FIELD_TAGS].fillna('')
 
         # --- 2. 명사 추출 및 DB 삽입 ---
         db = client[DB_NAME]
         record_collection = db[RECORD_NOUNS_COLLECTION]
-
-        # **주의:** 워커가 데이터를 추가/재생성할 때 기존 데이터를 지우는 로직이 필요한지 확인 후 사용
-        # record_collection.delete_many({})
 
         documents_to_insert = []
         total_records = len(df)
@@ -116,19 +119,36 @@ def process_worker_files() -> bool:
         print("--- 레코드별 명사 추출 및 MongoDB 직접 저장 시작 (file_noun_records) ---")
 
         for index, row in df.iterrows():
-            combined_text = str(row[DB_FIELD_HEADING]) + ' ' + str(row[DB_FIELD_ARTICLES])
-            nouns = extract_and_filter_proper_nouns(combined_text)
-            parsed_tags = parse_tags(str(row[DB_FIELD_TAGS]))
+            try:
+                # 텍스트 접근: CSV_FIELD_... 변수 사용
+                combined_text = str(row[CSV_FIELD_HEADING]) + ' ' + str(row[CSV_FIELD_ARTICLES])
 
-            document = {
-                DB_FIELD_RECORD_ID: int(row[DB_FIELD_RECORD_ID]),
-                DB_FIELD_HEADING: str(row[DB_FIELD_HEADING]),
-                DB_FIELD_DATE: str(row[DB_FIELD_DATE]),
-                DB_FIELD_TAGS: parsed_tags,
-                DB_FIELD_NOUNS: nouns,
-                "noun_count": len(nouns)
-            }
-            documents_to_insert.append(document)
+                nouns = extract_and_filter_proper_nouns(combined_text)
+                parsed_tags = parse_tags(str(row[CSV_FIELD_TAGS]))
+
+                # RecordID 처리: CSV 컬럼이 DataFrame에 없으면, row.get()은 index를 반환하여 KeyError 방지
+                record_id_value = int(row.get(CSV_FIELD_RECORD_ID, index))
+
+                document = {
+                    # DB 필드명(Key)에 CSV 필드 값(Value)을 할당합니다.
+                    DB_FIELD_RECORD_ID: record_id_value,
+
+                    DB_FIELD_HEADING: str(row[CSV_FIELD_HEADING]),
+                    DB_FIELD_DATE: str(row[CSV_FIELD_DATE]),
+                    DB_FIELD_TAGS: parsed_tags,
+                    DB_FIELD_ARTICLES: str(row[CSV_FIELD_ARTICLES]),
+                    DB_FIELD_NOUNS: nouns,
+                    "noun_count": len(nouns)
+                }
+                documents_to_insert.append(document)
+
+            except KeyError as e:
+                # 필수 CSV 컬럼이 누락된 경우 (e.g. 'title'이나 'text'가 없는 경우)
+                print(f"ERROR: 데이터 처리 중 필수 CSV 컬럼 누락 오류: {e}. 해당 레코드(Index {index})를 건너뜁니다.", file=sys.stderr)
+                continue
+            except Exception as e:
+                print(f"ERROR: 데이터 처리 중 알 수 없는 오류 발생 (Index {index}): {e}", file=sys.stderr)
+                continue
 
             if (index + 1) % 1000 == 0:
                 print(f"처리 진행 중: {index + 1}/{total_records} 레코드")
@@ -139,14 +159,13 @@ def process_worker_files() -> bool:
         else:
             print("⚠️ 경고: 저장할 레코드가 없습니다.")
 
-        success = True  # 모든 작업이 오류 없이 완료됨
+        success = True
 
     except Exception as e:
         print(f"ERROR: 워커 데이터 처리 및 저장 중 오류 발생: {e}", file=sys.stderr)
         success = False
 
     finally:
-        # 🌟 중요: 작업 성공/실패와 관계없이 독립 연결을 닫아줍니다. 🌟
         if client:
             client.close()
             print(f"[{WORKER_NAME}] Importer 작업 완료 후 독립 연결 해제.")
