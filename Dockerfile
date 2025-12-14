@@ -4,13 +4,12 @@
 FROM python:3.10-slim
 
 RUN apt-get update && \
-    # 🌟 netcat-openbsd 추가 (DB 연결 대기용) 🌟
     apt-get install -y git netcat-openbsd && \
     rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리를 /usr/src/app으로 설정
 WORKDIR /usr/src/app
-
+COPY . /usr/src/app/
 # requirements.txt 복사 및 의존성 설치
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
