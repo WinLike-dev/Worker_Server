@@ -3,6 +3,7 @@
 from typing import List
 import pandas as pd
 from textblob import TextBlob
+import os
 from .db_connector import get_mongodb_client, close_mongodb_client
 from .constants import (
     WORKER_NAME, WORKER_FILE_PATH,
@@ -68,55 +69,91 @@ def parse_tags(tags_str: str) -> List[str]:
 
 def process_worker_files() -> bool:
     """
-    워커에게 할당된 CSV 파일 목록(WORKER_FILE_PATH)만 처리하고, DB 연결을 명시적으로 종료합니다.
+    할당된 CSV 파일을 읽어 명사를 추출하고 MongoDB에 저장합니다.
     """
-    client = None  # MongoDB 클라이언트 변수 초기화
-    total_success = False
+    client = None
+    total_success = True
 
     try:
-        # 1. MongoDB 연결 획득 (get_mongodb_client는 새로운 인스턴스를 반환)
+        # 1. DB 연결
         client = get_mongodb_client()
         if client is None:
-            return False  # 연결 실패 시 False 반환
-
-        # 2. 할당 파일 목록 검사 (이전에 누락되었던 로직)
-        if not WORKER_FILE_PATH:
-            print(f"⚠️ 경고: 워커 '{WORKER_NAME}'에게 할당된 파일 목록(WORKER_FILE_PATH)이 없습니다. 작업을 건너뜁니다.")
-            return True
-
-        print(f"[{WORKER_NAME}] 총 {len(WORKER_FILE_PATH)}개의 할당된 CSV 파일을 처리합니다.")
+            return False
 
         db = client[DB_NAME]
-        record_collection = db[RECORD_NOUNS_COLLECTION]
+        collection = db[RECORD_NOUNS_COLLECTION]
 
-        current_success = True
+        if not WORKER_FILE_PATH:
+            print(f"[{WORKER_NAME}] ⚠️ 처리할 파일이 없습니다.")
+            return True
 
-        # 3. 파일 처리 루프 (CSV 파일 처리 로직)
+        print(f"[{WORKER_NAME}] 총 {len(WORKER_FILE_PATH)}개의 파일을 처리합니다.")
+
+        # 2. 파일 순회
         for file_path in WORKER_FILE_PATH:
             try:
-                print(f"[{WORKER_NAME}] ➡️ 파일 처리 시작: {file_path}")
-                df = pd.read_csv(file_path)
+                print(f"[{WORKER_NAME}] ➡️ 파일 로드 중: {file_path}")
 
-                # 🌟 [여기에 기존 CSV 처리 및 DB 삽입 로직이 실행됩니다] 🌟
-                # ... (예: df를 순회하며 명사 추출 및 DB 삽입)
+                # CSV 파일 읽기 (인코딩 에러 방지)
+                try:
+                    df = pd.read_csv(file_path, encoding='utf-8')
+                except UnicodeDecodeError:
+                    df = pd.read_csv(file_path, encoding='cp949')
+
+                documents_to_insert = []
+                print(f"[{WORKER_NAME}]    - 데이터 처리 시작 ({len(df)}행)...")
+
+                # 3. 행(Row) 단위 처리 (여기가 핵심입니다!)
+                for index, row in df.iterrows():
+                    try:
+                        # 컬럼명 확인 필수! (csv 파일의 헤더와 일치해야 함)
+                        title = str(row.get('title', ''))
+                        content = str(row.get('content', ''))
+                        link = str(row.get('link', ''))
+
+                        # 제목과 내용을 합쳐서 분석
+                        full_text = f"{title} {content}"
+
+                        # 🌟🌟🌟 핵심 함수 호출 🌟🌟🌟
+                        nouns = extract_and_filter_proper_nouns(full_text)
+
+                        # 추출된 명사가 있을 경우에만 문서 생성
+                        if nouns:
+                            doc = {
+                                "title": title,
+                                "link": link,
+                                "nouns": nouns,  # 추출된 명사 리스트
+                                "worker_name": WORKER_NAME,
+                                "source_file": os.path.basename(file_path)
+                            }
+                            documents_to_insert.append(doc)
+
+                    except Exception as row_e:
+                        # 한 행이 에러나도 멈추지 않고 계속 진행
+                        continue
+
+                # 4. DB 일괄 삽입 (Batch Insert)
+                if documents_to_insert:
+                    collection.insert_many(documents_to_insert)
+                    print(f"[{WORKER_NAME}]    - ✨ {len(documents_to_insert)}건 DB 저장 완료.")
+                else:
+                    print(f"[{WORKER_NAME}]    - ⚠️ 저장할 데이터가 없습니다 (명사 추출 실패).")
 
                 print(f"[{WORKER_NAME}] ✅ 파일 처리 완료: {file_path}")
 
             except FileNotFoundError:
-                print(f"[{WORKER_NAME}] ❌ 파일 누락 오류: CSV 파일 '{file_path}'이 컨테이너에 없습니다.", file=sys.stderr)
-                current_success = False
+                print(f"[{WORKER_NAME}] ❌ 파일을 찾을 수 없음: {file_path}")
+                total_success = False
             except Exception as e:
-                print(f"[{WORKER_NAME}] ❌ 파일 처리 중 알 수 없는 오류 발생 ({file_path}): {e}", file=sys.stderr)
-                current_success = False
-
-        total_success = current_success  # 루프 종료 후 최종 성공 여부 결정
+                print(f"[{WORKER_NAME}] ❌ 파일 처리 중 오류 ({file_path}): {e}")
+                total_success = False
 
     except Exception as e:
-        print(f"[{WORKER_NAME}] ❌ 최상위 처리 오류 발생: {e}", file=sys.stderr)
+        print(f"[{WORKER_NAME}] ❌ 치명적 오류 발생: {e}")
         total_success = False
 
     finally:
-        # 4. 🌟 가장 중요: 함수 종료 전 반드시 연결 해제 🌟
+        # 5. DB 연결 해제
         close_mongodb_client(client)
 
     return total_success
