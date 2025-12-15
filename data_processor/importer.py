@@ -107,9 +107,12 @@ def process_worker_files() -> bool:
                 for index, row in df.iterrows():
                     try:
                         # 컬럼명 확인 필수! (csv 파일의 헤더와 일치해야 함)
-                        title = str(row.get('title', ''))
-                        content = str(row.get('content', ''))
-                        link = str(row.get('link', ''))
+                        title = str(row.get(CSV_FIELD_HEADING, ''))  # 'title'
+                        content = str(row.get(CSV_FIELD_ARTICLES, ''))  # 'text'
+                        link = str(row.get('link', ''))  # (CSV에 'link' 컬럼이 있다면 사용)
+                        date_data = str(row.get(CSV_FIELD_DATE, ''))
+                        tags_data = str(row.get(CSV_FIELD_TAGS, ''))
+                        parsed_tags = [tag.strip() for tag in tags_data.split(',') if tag.strip()]
 
                         # 제목과 내용을 합쳐서 분석
                         full_text = f"{title} {content}"
@@ -120,9 +123,13 @@ def process_worker_files() -> bool:
                         # 추출된 명사가 있을 경우에만 문서 생성
                         if nouns:
                             doc = {
-                                "title": title,
+                                DB_FIELD_HEADING: title,   # 마스터가 검색하는 'Heading' 키
+                                DB_FIELD_TAGS: parsed_tags, # 마스터가 검색하는 'Tags' 키 (리스트 형식)
+                                DB_FIELD_DATE: date_data,   # 마스터가 검색하는 'Date' 키
+                                DB_FIELD_NOUNS: nouns,      # 마스터가 집계하는 'nouns' 키
+
+                                # 기타 정보
                                 "link": link,
-                                "nouns": nouns,  # 추출된 명사 리스트
                                 "worker_name": WORKER_NAME,
                                 "source_file": os.path.basename(file_path)
                             }
