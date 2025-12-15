@@ -6,6 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from data_processor.constants import WORKER_NAME
 from data_processor.importer import process_worker_files  # <-- 이 함수만 사용
 import time  # 시간 측정을 위해 추가
+import sys
 
 
 # 🌟🌟🌟 run_processing_and_notify 함수와 notify_master_of_completion 함수는 주석 처리하거나 제거합니다. 🌟🌟🌟
