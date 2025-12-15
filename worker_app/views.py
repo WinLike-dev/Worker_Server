@@ -1,11 +1,12 @@
-# worker_app/views.py
+# worker_app/views.py (수정)
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
-from data_processor.constants import WORKER_NAME
+from data_processor.constants import WORKER_NAME # 그대로 유지
 from data_processor.importer import process_worker_files
 import requests
-import threading
+# 🌟 threading 대신 multiprocessing 임포트 🌟
+import multiprocessing
 import os
 
 # 🌟 마스터 서버의 IP는 환경 변수에서 가져올 필요 없이,
@@ -55,15 +56,18 @@ def handle_rebuild_request(request):
     """
     마스터 요청을 받자마자 즉시 응답(Phase 1)하고, 작업을 백그라운드(Phase 2)로 넘깁니다.
     """
-    print(f"[{WORKER_NAME}] Rebuild 요청 수신.")
+    try:
+        # Phase 2 작업을 독립적인 프로세스로 시작합니다.
+        # 🌟 threading.Thread 대신 multiprocessing.Process 사용 🌟
+        p = multiprocessing.Process(target=run_processing_and_notify)
+        p.start()
 
-    # 1. Phase 2 작업을 백그라운드 스레드로 분리하여 시작
-    rebuild_thread = threading.Thread(target=run_processing_and_notify)
-    rebuild_thread.start()
+        # Phase 1: 즉시 응답 반환
+        return JsonResponse({
+            "status": "ACCEPTED",
+            "message": f"Worker process started successfully on {multiprocessing.current_process().name}"
+        }, status=202)
 
-    # 2. Phase 1: 요청 수신 즉시 마스터에게 응답 반환 (HTTP 202 Accepted)
-    return JsonResponse({
-        "status": "Accepted",
-        "worker_name": WORKER_NAME,
-        "message": "Request received successfully. Data rebuild started in background."
-    }, status=202)
+    except Exception as e:
+        print(f"[{WORKER_NAME}] ❌ 프로세스 시작 실패: {e}")
+        return JsonResponse({"status": "ERROR", "message": str(e)}, status=500)
